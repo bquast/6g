@@ -32,21 +32,31 @@ const tangent = (v, up) => v.clone().sub(up.clone().multiplyScalar(v.dot(up))).n
 
 // ---------- terrain height ----------
 const TOWN = dirLL(52, 20);
+// ocean basin (for the submarine cable), landing stations on both sides, rocket pad
+const towardDir = (a, b, ang) => a.clone().applyAxisAngle(V3().crossVectors(a, b).normalize(), ang);
+const OCEAN = dirLL(72, -50), OCEAN_R0 = 100 / R, OCEAN_R1 = 160 / R, OCEAN_D = 36;
+const LAND_A = towardDir(OCEAN, TOWN, 150 / R), LAND_B = towardDir(OCEAN, TOWN, -150 / R);
+const PAD = dirLL(8, 14);
+const D2D_USERS = [];               // phones that talk direct to satellites: { p: () => Vector3, modes: [] }
 const FLAT = [                      // flat zones: radius m0 flat, blend out to m1 (metres)
   { d: TOWN, m0: 70, m1: 110, h: 0.3 },
   { d: dirLL(32, 34), m0: 20, m1: 50, h: 0.4 },   // gateway
   { d: dirLL(-38, 150), m0: 20, m1: 45, h: 0.6 }, // camper
   { d: dirLL(40, 42), m0: 25, m1: 55, h: 0.4 },   // farm
-  { d: dirLL(30, -8), m0: 20, m1: 45, h: 0.5 }    // hikers
+  { d: dirLL(30, -8), m0: 20, m1: 45, h: 0.5 },   // hikers
+  { d: LAND_A, m0: 10, m1: 24, h: 0.8 },
+  { d: LAND_B, m0: 10, m1: 24, h: 0.8 },
+  { d: PAD, m0: 30, m1: 60, h: 0.4 }
 ].map(f => ({ ...f, a0: f.m0 / R, a1: f.m1 / R }));
 const rawH = d =>
   12 * Math.sin(2.1 * d.x + 0.7) * Math.sin(2.7 * d.y + 1.1) * Math.sin(1.9 * d.z + 0.3) +
   4.0 * Math.sin(7.3 * d.x + 5.1 * d.z) + 2.0 * Math.sin(13.7 * d.y + 9.3 * d.x) +
   0.9 * Math.sin(29 * d.z + 23 * d.x) + 2.5;
+const baseH = d => rawH(d) - OCEAN_D * (1 - smooth(OCEAN_R0, OCEAN_R1, Math.acos(clamp(d.dot(OCEAN), -1, 1))));
 const hAt = d => FLAT.reduce((h, f) => {
   const a = Math.acos(clamp(d.dot(f.d), -1, 1));
   return lerp(f.h, h, smooth(f.a0, f.a1, a));
-}, rawH(d));
+}, baseH(d));
 const WATER = R - 0.8;
 const groundR = d => R + hAt(d);
 const walkR = d => Math.max(groundR(d), WATER + 0.2);
@@ -93,7 +103,8 @@ const makeTerrain = () => {
     m.divideScalar(3);
     const h = m.length() - R, u = m.clone().normalize();
     const j = 0.5 + 0.5 * Math.sin(u.x * 41 + u.z * 37);
-    if (h < -0.4) c.set('#e9d59c');
+    if (h < -8) c.set('#3b6b86').lerp(new THREE.Color('#4f7f8f'), j);
+    else if (h < -0.4) c.set('#e9d59c');
     else if (h < 5) c.set('#36c2a0').lerp(new THREE.Color('#7fdc8a'), j * 0.5);
     else if (h < 10) c.set('#2a8f86').lerp(new THREE.Color('#3aa39a'), j);
     else c.set('#c47a9e').lerp(new THREE.Color('#e3a3b8'), j);
@@ -103,7 +114,7 @@ const makeTerrain = () => {
   g.computeVertexNormals();
   const land = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
   const water = new THREE.Mesh(new THREE.IcosahedronGeometry(WATER, 28),
-    new THREE.MeshPhongMaterial({ color: '#1fa3c9', transparent: true, opacity: 0.82, shininess: 80, flatShading: true }));
+    new THREE.MeshPhongMaterial({ color: '#1fa3c9', transparent: true, opacity: 0.5, shininess: 80, flatShading: true }));
   const grp = new THREE.Group(); grp.add(land, water);
   return grp;
 };
@@ -196,14 +207,15 @@ const makeBoard = (title, lines, o = {}) => {
     tex.needsUpdate = true;
   };
   draw(lines);
-  const b = { mesh, draw, anchor: o.anchor, at: o.at, lift: o.lift ?? 3, range: o.range || 18 };
+  const b = { mesh, draw, anchor: o.anchor, at: o.at, lift: o.lift ?? 3, range: o.range || 18, mode: o.mode };
   BOARDS.push(b);
   return b;
 };
 // anchor: Object3D (follows it) or at: fixed Vector3. lift is along local up.
-const updateBoards = (camPos, showAll) => {
+const updateBoards = (camPos, showAll, mode) => {
   const p = V3();
   BOARDS.forEach(b => {
+    if ((b.mode && b.mode !== mode) || (b.anchor && !b.anchor.visible)) { b.mesh.visible = false; return; }
     if (b.anchor) b.anchor.getWorldPosition(p); else p.copy(b.at);
     const up = p.clone().normalize();
     b.mesh.position.copy(p).addScaledVector(up, b.lift);

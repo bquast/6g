@@ -22,58 +22,72 @@ const sky = makeSky(); scene.add(sky.grp);
 const world = buildSixG(scene);
 
 // ---------- settings (hub) ----------
-const OPT = { assist: true, comfort: true, labels: true };
+const OPT = { assist: true, comfort: true, labels: true, world: '6g' };
 
 // ---------- player ----------
 const S = { mode: 'walk', pos: townPos(0, -15), fwd: null, snap: 0, space: 0 };
 S.fwd = northAt(S.pos.clone().normalize());
 
-// ---------- craft ----------
+// ---------- craft: visible X-wing-style fighter; seat at cock y = 0, eye at y = 0.8 ----------
 const craft = new THREE.Group(); scene.add(craft);
-const cock = new THREE.Group(); craft.add(cock);              // offset to the seat
-const dark = lam('#3a3f52'), trim = lam('#d8dde8');
-[-1, 1].forEach(s => {
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 1.8), dark); rail.position.set(s * 0.55, 0.3, -0.2); cock.add(rail);
-});
-const nose = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.9, 6).rotateX(-Math.PI / 2), trim); nose.position.set(0, 0.0, -2.2); cock.add(nose);
+const cock = new THREE.Group(); craft.add(cock);              // moved so the seat fits the pilot's head height
+const hullM = lam('#e9edf3'), teal = lam('#19c3b3'), dark = lam('#3a3f52');
+const glass = new THREE.MeshBasicMaterial({ color: '#9fe8ff', transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false });
+const put = (p, m, x, y, z) => { m.position.set(x, y, z); p.add(m); return m; };
+put(cock, new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.75, 2.5), hullM), 0, -0.42, 1.85);          // fuselage behind the seat
+put(cock, new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.08, 2.52), teal), 0, -0.1, 1.85);
+put(cock, new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.95).rotateX(-Math.PI / 2), glass), 0, -0.14, -0.35);   // glass floor: see below
+[-1, 1].forEach(s => put(cock, new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 1.95), dark), s * 0.56, -0.14, -0.35));
+put(cock, new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.6, 3.8, 4, 1).rotateY(Math.PI / 4).rotateX(-Math.PI / 2), hullM), 0, -0.45, -3.2).scale.set(1.4, 0.75, 1);
+put(cock, new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.32, 1.9), hullM), 0.58, 0.12, -0.35);      // low sills
+put(cock, new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.32, 1.9), hullM), -0.58, 0.12, -0.35);
+put(cock, new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.12, 0.2), dark), 0, -0.02, -1.3);            // low front cowl
+put(cock, new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.3), glass), 0, 0.17, -1.25).rotation.x = -0.6;
+put(cock, new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.55), dark), 0, -0.06, 0.25);         // seat
+put(cock, new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.8, 0.1), dark), 0, 0.36, 0.56);
 const engines = [];
-[[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([sx, sy]) => {    // X-foils behind the pilot, below eye line
-  const w = new THREE.Group(); w.position.set(sx * 0.5, 0.35, 0.9); w.rotation.z = sx * sy * 0.22;
-  w.add(new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.04, 0.9), trim).translateX(sx * 2.0));
-  const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.4, 8).rotateX(Math.PI / 2), dark); eng.position.set(sx * 3.8, 0, 0.1); w.add(eng);
-  const fl = new THREE.Mesh(new THREE.CircleGeometry(0.14, 12), new THREE.MeshBasicMaterial({ color: '#ff6a3d' })); fl.position.set(sx * 3.8, 0, 0.81); w.add(fl); engines.push(fl);
-  cock.add(w);
+[[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([sx, sy]) => {
+  put(cock, new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 2.2, 10).rotateX(Math.PI / 2), dark), sx * 0.8, -0.42 + sy * 0.3, 2.0);
+  engines.push(put(cock, new THREE.Mesh(new THREE.CircleGeometry(0.22, 14), new THREE.MeshBasicMaterial({ color: '#ff6a3d' })), sx * 0.8, -0.42 + sy * 0.3, 3.11));
+  const w = put(cock, new THREE.Group(), sx * 0.6, -0.42 + sy * 0.25, 2.1); w.rotation.z = sx * sy * 0.26;   // S-foils, behind the pilot
+  put(w, new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.05, 1.3), hullM), sx * 2.0, 0, 0);
+  put(w, new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 1.32), teal), sx * 2.6, 0, 0);
+  put(w, new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 3.6, 6).rotateX(Math.PI / 2), dark), sx * 4.0, 0, -0.9);
 });
-// yoke and throttle (positions set by fitCockpit)
-const yoke = new THREE.Group(); cock.add(yoke);
+// yoke: centre, low, on a column from the floor
+const yoke = put(cock, new THREE.Group(), 0, 0.2, -0.42);
+put(cock, new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 0.34, 6), dark), 0, 0.03, -0.55);
 const yokeVis = new THREE.Group(); yoke.add(yokeVis);
-yokeVis.add(new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.012, 6, 20, Math.PI), lam('#ffd23f')).rotateZ(Math.PI));
-yokeVis.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.3, 6).rotateX(Math.PI / 2), dark).translateZ(0.15));
-const thr = new THREE.Group(); cock.add(thr);
-thr.add(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.02, 0.32), dark));
-const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), lam('#ff5fa2')); thr.add(knob);
+yokeVis.add(new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.014, 6, 20, Math.PI), lam('#ffd23f')).rotateZ(Math.PI));
+[-1, 1].forEach(s => put(yokeVis, new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 6), lam('#ffd23f')), s * 0.13, 0.04, 0));
+put(yokeVis, new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.14, 6).rotateX(Math.PI / 2), dark), 0, -0.13, -0.07);
+// throttle: lever at seat level on the left; pull it up for more power
+const thr = put(cock, new THREE.Group(), -0.4, 0.02, 0.1);
+put(cock, new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.14), dark), -0.4, -0.02, 0.1);
+put(thr, new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.34), dark), 0, 0, -0.17);
+const knob = put(thr, new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), lam('#ff5fa2')), 0, 0, -0.34);
 const hudCv = document.createElement('canvas'); hudCv.width = 1024; hudCv.height = 200;
 const hudTex = new THREE.CanvasTexture(hudCv); hudTex.colorSpace = THREE.SRGBColorSpace;
 const hud = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.254), new THREE.MeshBasicMaterial({ map: hudTex, transparent: true, depthWrite: false, fog: false }));
-hud.renderOrder = 20; cock.add(hud);
+hud.renderOrder = 20; hud.position.set(0, 1.22, -1.1); hud.rotation.x = 0.35; cock.add(hud);
 const fitCockpit = () => {
   const h = renderer.xr.isPresenting ? camera.position : V3(0, 1.25, 0);
-  cock.position.set(h.x, 0, h.z);
-  yoke.position.set(0.2, h.y - 0.5, -0.4);
-  thr.position.set(-0.28, h.y - 0.55, -0.3);
-  hud.position.set(0, h.y + 0.42, -1.1); hud.rotation.x = 0.35;
+  cock.position.set(h.x, h.y - 0.8, h.z);
 };
 fitCockpit();
 const CR = { pos: V3(), q: new THREE.Quaternion(), speed: 0, thr: 0 };
 {
   const d = localDir(TOWN, 7, -18); CR.pos.copy(d).multiplyScalar(groundR(d) + 1.2); CR.q.copy(basisQ(d, northAt(d)));
-  const pad = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 0.15, 24), lam('#4a4f6a'));
+  const pad = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 0.15, 24), lam('#4a4f6a'));
   scene.add(placeLocal(pad, 7, -18, 0));
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.06, 6, 32).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd23f' }));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.06, 6, 32).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffd23f' }));
   scene.add(placeLocal(ring, 7, -18, 0.12));
-  makeBoard('Your craft', ['Walk close, then press A (or E).', 'Right hand: grab the yellow yoke.', '  push/pull = pitch, twist = roll', 'Left hand: grab the pink throttle.', '  push forward = more speed', 'Or: right stick = pitch/roll,', '  left stick = throttle/yaw.', 'B = assist on/off. A = exit (low).'], { at: townPos(7, -18), lift: 3.2, range: 10 });
+  makeBoard('Your craft', ['Walk close, then press A (or E).', 'Right hand: grab the yellow yoke', '  (centre): push/pull = pitch, twist = roll.', 'Left hand: grab the pink lever at', '  the seat. Pull up = more power.', 'Or: right stick = pitch/roll,', '  left stick = throttle/yaw.', 'B = assist on/off. A = exit (low).'], { at: townPos(7, -18), lift: 3.6, range: 10 });
 }
 
+// ---------- the rest of the comms world, and the ElonVerse setting ----------
+const comms = buildComms(scene, world);
+const elon = buildElon(scene, world, comms);
 BOARDS.forEach(b => scene.add(b.mesh));
 
 // ---------- XR controllers ----------
@@ -93,17 +107,17 @@ const dz = x => Math.abs(x) < 0.15 ? 0 : x;
 
 // ---------- hub on the left wrist (poke with the right hand) ----------
 const hubG = new THREE.Group(); hubG.position.set(0, 0.05, 0.06); hubG.rotation.x = -0.9;
-const hubCv = document.createElement('canvas'); hubCv.width = 512; hubCv.height = 128;
+const hubCv = document.createElement('canvas'); hubCv.width = 640; hubCv.height = 128;
 const hubTex = new THREE.CanvasTexture(hubCv); hubTex.colorSpace = THREE.SRGBColorSpace;
-hubG.add(new THREE.Mesh(new THREE.PlaneGeometry(0.24, 0.06), new THREE.MeshBasicMaterial({ map: hubTex, transparent: true, fog: false })));
-const HUB = [['Assist', 'assist'], ['Comfort', 'comfort'], ['Labels', 'labels'], ['Fit', null]];
+hubG.add(new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.06), new THREE.MeshBasicMaterial({ map: hubTex, transparent: true, fog: false })));
+const HUB = [['Assist', 'assist'], ['Comfort', 'comfort'], ['Labels', 'labels'], ['World', 'world'], ['Fit', null]];
 const drawHub = () => {
-  const c = hubCv.getContext('2d'); c.clearRect(0, 0, 512, 128);
+  const c = hubCv.getContext('2d'); c.clearRect(0, 0, 640, 128);
   HUB.forEach(([n, k], i) => {
-    const on = k ? OPT[k] : true;
+    const on = k === 'world' ? true : k ? OPT[k] : true;
     c.fillStyle = on ? '#1f6f8b' : '#3a2a3a'; c.beginPath(); c.roundRect(6 + i * 127, 8, 116, 112, 16); c.fill();
     c.fillStyle = '#fff'; c.font = 'bold 28px system-ui'; c.textAlign = 'center'; c.fillText(n, 64 + i * 127, 60);
-    c.font = '22px system-ui'; c.fillText(k ? (on ? 'ON' : 'off') : 'hands', 64 + i * 127, 94);
+    c.font = '22px system-ui'; c.fillText(k === 'world' ? (OPT.world === 'elon' ? 'Elon' : '6G') : k ? (on ? 'ON' : 'off') : 'hands', 64 + i * 127, 94);
   });
   hubTex.needsUpdate = true;
 };
@@ -111,7 +125,8 @@ drawHub();
 let hubCool = 0;
 const hubAction = i => {
   const k = HUB[i][1];
-  if (k) OPT[k] = !OPT[k]; else fitCockpit();
+  if (k === 'world') OPT.world = OPT.world === 'elon' ? '6g' : 'elon';
+  else if (k) OPT[k] = !OPT[k]; else fitCockpit();
   drawHub();
 };
 const pokeHub = dt => {
@@ -119,7 +134,7 @@ const pokeHub = dt => {
   if (!hands.left || !hands.right || hubCool > 0) return;
   const tip = hands.right.grip.localToWorld(V3(0, 0, -0.07));
   HUB.forEach((_, i) => {
-    const b = hubG.localToWorld(V3(-0.09 + i * 0.06, 0, 0));
+    const b = hubG.localToWorld(V3(-0.12 + i * 0.06, 0, 0));
     if (tip.distanceTo(b) < 0.03) { hubAction(i); hubCool = 0.7; }
   });
 };
@@ -186,10 +201,10 @@ const grabUpdate = () => {
   const r = hands.right, l = hands.left;
   const local = h => cock.worldToLocal(h.grip.getWorldPosition(V3()));
   if (r && btn('right', 1)) {
-    if (!grab.yoke && local(r).distanceTo(yoke.position) < 0.2) grab.yoke = { p0: local(r), q0: r.grip.quaternion.clone() };
+    if (!grab.yoke && local(r).distanceTo(yoke.position) < 0.22) grab.yoke = { p0: local(r), q0: r.grip.quaternion.clone() };
   } else grab.yoke = null;
   if (l && btn('left', 1)) {
-    if (!grab.thr && local(l).distanceTo(thr.position.clone().add(knob.position)) < 0.2) grab.thr = { z0: local(l).z, t0: CR.thr };
+    if (!grab.thr && local(l).distanceTo(cock.worldToLocal(knob.getWorldPosition(V3()))) < 0.2) grab.thr = true;
   } else grab.thr = null;
   let pitch = 0, roll = 0;
   if (grab.yoke) {
@@ -200,7 +215,7 @@ const grabUpdate = () => {
     roll = clamp(-tw / 1.0, -1, 1);
     yokeVis.position.z = clamp(dzz, -0.12, 0.12); yokeVis.rotation.z = -roll * 1.0;
   } else { yokeVis.position.z *= 0.8; yokeVis.rotation.z *= 0.8; }
-  if (grab.thr) CR.thr = clamp(grab.thr.t0 + (grab.thr.z0 - local(l).z) / 0.25, 0, 1);
+  if (grab.thr) { const v = local(l).sub(thr.position); CR.thr = clamp((Math.atan2(v.y, -v.z) + 0.15) / 1.1, 0, 1); }
   return { pitch, roll };
 };
 const fly = dt => {
@@ -209,9 +224,9 @@ const fly = dt => {
   const roll = clamp(g.roll + (grab.yoke ? 0 : dz(axis('right', 2))) + k('ArrowRight') - k('ArrowLeft'), -1, 1);
   const yaw = clamp(-dz(axis('left', 2)) + k('KeyA') - k('KeyD'), -1, 1);
   if (!grab.thr) CR.thr = clamp(CR.thr + (-dz(axis('left', 3)) + k('KeyW') - k('KeyS')) * dt * 0.5, 0, 1);
-  knob.position.z = 0.14 - CR.thr * 0.28;
+  thr.rotation.x = -0.15 + CR.thr * 1.1;
   const up = CR.pos.clone().normalize();
-  const vmax = 40 + 80 * S.space;
+  const vmax = 40 + 80 * S.space + Math.max(0, alt(CR.pos) - 300) * 0.45;
   CR.speed += (CR.thr * vmax - CR.speed) * Math.min(1, dt * 0.9);
   const right = V3(1, 0, 0).applyQuaternion(CR.q), bank = right.dot(up);
   let px = pitch * 1.0, yy = yaw * 0.7, rz = -roll * 1.7;
@@ -222,7 +237,7 @@ const fly = dt => {
   const fwd = V3(0, 0, -1).applyQuaternion(CR.q);
   const np = CR.pos.clone().addScaledVector(fwd, CR.speed * dt), nu = np.clone().normalize();
   CR.q.premultiply(new THREE.Quaternion().setFromUnitVectors(up, nu)).normalize();  // follow the curve
-  const rmin = walkR(nu) + 1.2, rmax = R + 560;
+  const rmin = walkR(nu) + 1.2, rmax = R + 2500;
   CR.pos.copy(nu).multiplyScalar(clamp(np.length(), rmin, rmax));
   craft.position.copy(CR.pos); craft.quaternion.copy(CR.q);
   rig.position.copy(CR.pos); rig.quaternion.copy(CR.q);
@@ -230,7 +245,7 @@ const fly = dt => {
   engines.forEach(e => e.material.color.setHSL(0.03 + CR.thr * 0.08, 1, 0.4 + CR.thr * 0.3));
   return Math.abs(px) + Math.abs(turn) + Math.abs(rz) * 0.5;
 };
-const layer = a => a < 8 ? 'ground' : a < 45 ? 'drone layer' : a < 160 ? 'HAPS layer (~20 km)' : 'LEO layer (550 km)';
+const layer = a => a < 8 ? 'ground' : a < 45 ? 'drone layer' : a < 160 ? 'HAPS layer (~20 km)' : a < 600 ? 'LEO layer (~550 km)' : a < 1800 ? 'above LEO, below GEO' : 'GEO layer (35,786 km)';
 let hudT = 0;
 const drawHud = () => {
   const c = hudCv.getContext('2d'), a = alt(CR.pos);
@@ -266,6 +281,7 @@ renderer.setAnimationLoop(time => {
   if (pressed('A', btn('right', 4) || keys.KeyE)) S.mode === 'walk' ? (S.pos.distanceTo(CR.pos) < 6 && board()) : exit();
   if (pressed('B', btn('right', 5) || keys.KeyQ)) { OPT.assist = !OPT.assist; drawHub(); }
   if (pressed('L', keys.KeyL)) { OPT.labels = !OPT.labels; drawHub(); }
+  if (pressed('G', keys.KeyG)) hubAction(3);
   if (S.mode === 'walk') { craft.position.copy(CR.pos); craft.quaternion.copy(CR.q); }
   const motion = S.mode === 'walk' ? walk(dt) : fly(dt);
   pokeHub(dt);
@@ -273,13 +289,13 @@ renderer.setAnimationLoop(time => {
   vig.material.opacity = vigA; vig.visible = vigA > 0.01;
   hudT += dt; if (S.mode === 'fly' && hudT > 0.2) { hudT = 0; drawHud(); }
   hud.visible = S.mode === 'fly';
-  world.update(t, dt);
+  world.update(t, dt, OPT); comms.update(t, dt); elon.update(t, dt, OPT.world === 'elon');
   const cp = camera.getWorldPosition(V3()), up = cp.clone().normalize();
   const sd = up.clone().multiplyScalar(0.75).add(northAt(up).multiplyScalar(-0.45)).add(eastAt(up).multiplyScalar(0.5)).normalize();
   sun.position.copy(cp).addScaledVector(sd, 200); sun.target.position.copy(cp);
   S.space = sky.update(cp, sd);
   scene.fog.color.setRGB(lerp(1, 0.01, S.space), lerp(0.75, 0.01, S.space), lerp(0.63, 0.03, S.space));
   scene.fog.far = 700 + S.space * 5000; scene.fog.near = 150 + S.space * 3000;
-  updateBoards(cp, OPT.labels);
+  updateBoards(cp, OPT.labels, OPT.world);
   renderer.render(scene, camera);
 });

@@ -45,7 +45,9 @@ const makeBeam = (scene, color, o = {}) => {
     if (!on) return;
     const L = a.distanceTo(b), w = Math.max(L * Math.tan(bw / 2), 0.04);
     mesh.position.copy(a); mesh.lookAt(b); mesh.scale.set(w, w, L);
-    const v = o.speed ?? 14, s = Math.max(o.size ?? 0.1, L * 0.006);
+    a = a.clone(); b = b.clone();
+    const v = o.speed ?? 14, s = Math.min(o.maxSize ?? 1.2, Math.max(o.size ?? 0.1, L * 0.006));
+    if (o.rev) [a, b] = [b, a];
     for (let i = 0; i < nD; i++) {
       P.lerpVectors(a, b, ((t * v / L) + i / nD) % 1); S.setScalar(s);
       dl.setMatrixAt(i, M.compose(P, Q, S));
@@ -144,37 +146,63 @@ const buildSixG = scene => {
     '# time on the same frequency (MU-MIMO).'
   ], { at: townPos(0, 0), lift: 6, range: 26, w: 4 });
 
-  // ---------- road and Tesla ----------
-  const RR = 30;
+  // ---------- road, a platoon of connected cars, V2X sidelink ----------
+  const RR = 30, GAP = 9, VMAX = 9;              // world m/s; shown as real km/h with x2
   add(ribbon(u => [RR * Math.sin(u * 2 * Math.PI), RR * Math.cos(u * 2 * Math.PI)], 96, 5, '#3a3f58'));
   add(ribbon(u => [RR * Math.sin(u * 2 * Math.PI), RR * Math.cos(u * 2 * Math.PI)], 96, 0.2, '#f4f0d0', 0.07));
-  const car = add(new THREE.Group());
-  car.add(box(1.9, 0.8, 4.6, lam('#f3f3f6')).translateY(0.3));
-  car.add(box(1.7, 0.55, 2.3, lam('#1c2233')).translateY(1.1).translateZ(0.2));
-  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([x, z]) => {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.3, 10).rotateZ(Math.PI / 2), lam('#222'));
-    w.position.set(x * 0.95, 0.36, z * 1.45); car.add(w);
-  });
-  const carAnt = new THREE.Mesh(BALL, new THREE.MeshBasicMaterial({ color: '#4fe3ff' })); carAnt.scale.setScalar(0.12);
-  carAnt.position.set(0, 1.72, 0.6); car.add(carAnt);
-  const carV = 9;               // world m/s (= 72 m/s real... shown as real-scale below)
-  const carAt = t => { const a = t * carV / RR; return [RR * Math.sin(a), RR * Math.cos(a)]; };
+  const mkCar = col => {
+    const g = add(new THREE.Group());
+    g.add(box(1.9, 0.8, 4.6, lam(col)).translateY(0.3));
+    g.add(box(1.7, 0.55, 2.3, lam('#1c2233')).translateY(1.1).translateZ(0.2));
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([x, z]) => {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.3, 10).rotateZ(Math.PI / 2), lam('#222'));
+      w.position.set(x * 0.95, 0.36, z * 1.45); g.add(w);
+    });
+    const ant = new THREE.Mesh(BALL, new THREE.MeshBasicMaterial({ color: '#4fe3ff' })); ant.scale.setScalar(0.12);
+    ant.position.set(0, 1.72, 0.6); g.add(ant);
+    const brakeM = new THREE.MeshBasicMaterial({ color: '#550000' });
+    [-0.65, 0.65].forEach(x => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.16, 0.05), brakeM); b.position.set(x, 0.85, 2.32); g.add(b); });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 40), glow('#7dff9a', 0.5));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.15; g.add(ring);
+    return { g, ant, brakeM, ring, ph: Math.random() };
+  };
+  const cars = ['#f3f3f6', '#e2453c', '#3d7bff', '#ffd23f'].map(mkCar);
+  const car = cars[0].g, carAnt = cars[0].ant;
+  const P = { s: 0, v: VMAX, brake: false };
+  const CYC = 16, vAt = c => c < 10 ? VMAX : c < 11.2 ? lerp(VMAX, 2, (c - 10) / 1.2) : lerp(2, VMAX, (c - 11.2) / 4.8);
+  const posAt = s => { const a = s / RR; return [RR * Math.sin(a), RR * Math.cos(a)]; };
   const carBeam = makeBeam(scene, '#4fe3ff');
   const carPred = makeBeam(scene, '#ffffff', { opacity: 0.07, n: 0, up: false });
+  const side = cars.slice(1).map(() => makeBeam(scene, '#7dff9a', { opacity: 0.35, speed: 10, size: 0.07 }));
+  const rsu = add(placeLocal(new THREE.Group(), 4.5, -34, 0, 0));
+  rsu.add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 4, 6).translate(0, 2, 0), lam('#888')));
+  rsu.add(box(0.5, 0.4, 0.3, lam('#e8e8f0')).translateY(4));
+  rsu.updateMatrixWorld(true);
+  const rsuP = wp(rsu, 0, 4.2, 0), rsuBeam = makeBeam(scene, '#7dff9a', { opacity: 0.25, speed: 8, size: 0.07 });
   const carB = makeBoard('Connected car', [], { anchor: car, lift: 4.5, range: 22 });
-  const carState = { b: null, d: 0, v: 0 };
-  ups.push(t => {
-    const [e, n] = carAt(t), [e2, n2] = carAt(t + 0.05);
-    const d = localDir(TOWN, e, n), d2 = localDir(TOWN, e2, n2);
-    placeOn(car, d, 0, d2.clone().sub(d)); car.updateMatrixWorld();
+  const carState = { d: 0 };
+  ups.push((t, dt) => {
+    const c = t % CYC; P.v = vAt(c); P.brake = c >= 10 && c < 11.2; P.s += P.v * dt;
+    cars.forEach((k, i) => {
+      const [e, n] = posAt(P.s - i * GAP), [e2, n2] = posAt(P.s - i * GAP + 0.3);
+      const d = localDir(TOWN, e, n), d2 = localDir(TOWN, e2, n2);
+      placeOn(k.g, d, 0, d2.sub(d)); k.g.updateMatrixWorld();
+      k.brakeM.color.set(P.brake ? '#ff2020' : '#550000');
+      const f = (t * 1.2 + k.ph) % 1;
+      k.ring.scale.setScalar(1 + f * 11); k.ring.material.opacity = 0.45 * (1 - f);
+      k.ring.material.color.set(P.brake ? '#ff3355' : '#7dff9a');
+    });
+    side.forEach((b, i) => { b.set(wp(cars[i].ant), wp(cars[i + 1].ant), 0.15, t); b.mesh.material.color.set(P.brake ? '#ff3355' : '#7dff9a'); });
+    const near = cars.map(k => wp(k.ant)).sort((a, b) => a.distanceTo(rsuP) - b.distanceTo(rsuP))[0];
+    rsuBeam.set(rsuP, near, 0.12, t, near.distanceTo(rsuP) < 16);
     const tgt = wp(carAnt), src = panelFor(tgt);
     carBeam.set(src, tgt, beamW(NEL), t);
-    const [pe, pn] = carAt(t + 1.0); carPred.set(src, townPos(pe, pn, 1.7), beamW(NEL), t);
+    const [pe, pn] = posAt(P.s + P.v * 1.0); carPred.set(src, townPos(pe, pn, 1.7), beamW(NEL), t);
     carState.d = src.distanceTo(tgt) * K_GROUND;
   });
   live(carB, () => {
     const o = { d: carState.d, f: 7e9, bw: 400e6, ptx: 43, gtx: dB(NEL * NEL) + 5, grx: 8, layers: 4 };
-    const b = budget(o), v = carV * K_GROUND / 4;   // shown speed: 18 m/s
+    const b = budget(o), v = P.v * 2;
     return [
       `Speed ${(v * 3.6).toFixed(0)} km/h. Beam follows the car.`,
       ...budgetLines(b, o),
@@ -182,6 +210,22 @@ const buildSixG = scene => {
       'White ghost cone: AI/ML beam prediction',
       '# The model predicts the beam 1 s ahead,',
       '# so the site sweeps fewer beams.'
+    ];
+  });
+  const v2xB = makeBoard('V2X: cars talk direct', [], { at: townPos(-2, -36), lift: 3.2, range: 18 });
+  live(v2xB, () => {
+    const v = VMAX * 2, kmh = (v * 3.6).toFixed(0);
+    return [
+      'Green links: sidelink (PC5), car to car,',
+      'no tower in the path. ITS band 5.9 GHz.',
+      'Rings: each car sends position + speed',
+      'about 10 times per second.',
+      P.brake ? '> LEAD CAR BRAKES: all cars brake now' : '> watch: every 16 s the lead car brakes',
+      `At ${kmh} km/h, before the brakes go on:`,
+      `  human sees brake light (1.5 s): ${(v * 1.5).toFixed(0)} m`,
+      `  V2X warning (~10 ms):           ${(v * 0.01).toFixed(1)} m`,
+      '# Pole = roadside unit (V2I): signals,',
+      '# hazards. 6G adds better sidelink + position.'
     ];
   });
 
@@ -354,7 +398,7 @@ const buildSixG = scene => {
     isacS.dc = dc * K_GROUND; isacS.dd = ddr * K_GROUND; isacS.hd = droneH(t) * K_GROUND / 4;
   });
   live(isacB, () => {
-    const v = carV * K_GROUND / 4;
+    const v = P.v * 2;
     return [
       'The same 6G signal works as a radar.',
       'Yellow wave = sensing pulse from site.',
@@ -527,8 +571,8 @@ const buildSixG = scene => {
   ], { anchor: haps[0].g, lift: 9, range: 70, w: 12 });
   const hapsB = makeBoard('HAPS link to the tractor', [], { anchor: haps[0].g, lift: -12, range: 70, w: 12 });
   const hapsS = { d: 0 };
-  makeBoard('Farm (served by HAPS)', ['No tower here. The airship above', 'gives coverage to the tractor and', 'the farm sensors.'], { at: wp(farm, 0, 0, 0), lift: 9, range: 30, w: 5 });
-  makeBoard('Hikers (served by HAPS)', ['Far from any tower. The airship', 'covers them with one wide beam.', 'Its backhaul goes by laser to a', 'LEO satellite.'], { at: wp(hike), lift: 5, range: 30, w: 5 });
+  makeBoard('Farm (served by HAPS)', ['No tower here. The airship above', 'gives coverage to the tractor and', 'the farm sensors.'], { at: wp(farm, 0, 0, 0), lift: 9, range: 30, w: 5, mode: '6g' });
+  makeBoard('Hikers (served by HAPS)', ['Far from any tower. The airship', 'covers them with one wide beam.', 'Its backhaul goes by laser to a', 'LEO satellite.'], { at: wp(hike), lift: 5, range: 30, w: 5, mode: '6g' });
 
   // ================= space layer: LEO =================
   const RO = R + 300, PER = 220, NS = 7;
@@ -549,7 +593,7 @@ const buildSixG = scene => {
   planes.forEach((pl, k) => { for (let j = 0; j < NS; j++) sats.push({ pl, k, ph: j / NS * Math.PI * 2 + k * 0.4, g: sat(), p: V3() }); });
   const isl = sats.map(() => makeLine(scene, '#ff4d4d')); isl.forEach(l => l.line.material.opacity = 0.5);
   const gwLink = makeBeam(scene, '#ffcf4a', { up: true });
-  const d2d = makeBeam(scene, '#7dff9a', { opacity: 0.12 });
+  const d2dB = [];                       // one beam per direct-to-device phone
   const relay = makeLine(scene, '#ff4d4d', true);
   const satAt = (s, t) => { const a = s.ph + t * 2 * Math.PI / PER; return s.pl.u.clone().multiplyScalar(Math.cos(a) * RO).addScaledVector(s.pl.v, Math.sin(a) * RO); };
   const visible = (g, p, minEl = 0.2) => p.clone().sub(g).normalize().dot(g.clone().normalize()) > minEl;
@@ -560,6 +604,7 @@ const buildSixG = scene => {
   const fire = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7, 6).translate(0, 0.35, 0), new THREE.MeshBasicMaterial({ color: '#ff7a1a' })); fire.position.set(0, 0, 2.5); camp.add(fire);
   camp.updateMatrixWorld(true);
   const campP = wp(camper, 0.2, 1.55, 0);
+  D2D_USERS.push({ p: () => campP, modes: ['6g', 'elon'] });
   makeBoard('Camper: phone direct to satellite', ['No tower, no HAPS. A normal phone', 'talks direct to a LEO satellite', '(direct-to-device, NTN in 3GPP).', 'Low rate, but it works everywhere.', '# Green beam: satellite spot beam.'], { at: wp(camp), lift: 4, range: 30, w: 5 });
   const satB = makeBoard('LEO satellite at 550 km', [], { anchor: sats[0].g, lift: 8, range: 140, w: 26 });
   const satB2 = makeBoard('LEO constellation', [
@@ -573,27 +618,34 @@ const buildSixG = scene => {
     '# Real Doppler up to ~+/-50 kHz at 2 GHz.'
   ], { anchor: sats[NS].g, lift: 8, range: 140, w: 26 });
   const satS = { el: 0, d: 0, vr: 0, has: false };
-  ups.push((t, dt) => {
+  ups.push((t, dt, o) => {
+    const std = !o || o.world !== 'elon';
     sats.forEach(s => {
-      s.p.copy(satAt(s, t)); s.g.position.copy(s.p);
+      s.p.copy(satAt(s, t)); s.g.position.copy(s.p); s.g.visible = std;
       const fwd = satAt(s, t + 0.5).sub(s.p).normalize(); s.g.quaternion.copy(basisQ(s.p.clone().normalize(), fwd));
     });
-    sats.forEach((s, i) => { const n = sats[(i % NS === NS - 1) ? i - NS + 1 : i + 1]; isl[i].set(s.p, n.p); });
-    const sg = nearestVis(gwP, 0.25); gwLink.set(gwP, sg ? sg.p : gwP, 0.02, t, !!sg);
-    const sc = nearestVis(campP, 0.2); d2d.set(sc ? sc.p : campP, campP, 0.12, t, !!sc);
+    sats.forEach((s, i) => { const n = sats[(i % NS === NS - 1) ? i - NS + 1 : i + 1]; isl[i].set(s.p, n.p, std); });
+    const sg = nearestVis(gwP, 0.25); gwLink.set(gwP, sg ? sg.p : gwP, 0.02, t, !!sg && std);
+    const users = D2D_USERS.filter(u => u.modes.includes('6g'));
+    while (d2dB.length < users.length) d2dB.push(makeBeam(scene, '#7dff9a', { opacity: 0.12 }));
+    d2dB.forEach((b, i) => {
+      const u = users[i], p = u && u.p(), sc = u && nearestVis(p, 0.2);
+      b.set(sc ? sc.p : V3(), p || V3(), 0.12, t, !!sc && std);
+    });
     haps.forEach((h, k) => {
       const a = t * 0.05 + h.ph, cd = h.c.clone();
       const off = eastAt(cd).multiplyScalar(Math.cos(a) * 12).add(northAt(cd).multiplyScalar(Math.sin(a) * 12));
       const p = cd.clone().multiplyScalar(groundR(cd) + h.alt).add(off);
       h.g.position.copy(p); h.g.quaternion.copy(basisQ(p.clone().normalize(), tangent(V3().crossVectors(p, off), p.clone().normalize())));
+      h.g.visible = std;
       const bottom = p.clone().addScaledVector(p.clone().normalize(), -3.6);
       if (k === 0) {
         tractor.position.set(Math.sin(t * 0.1) * 12, 0, -14 + Math.cos(t * 0.1) * 5); farm.updateMatrixWorld();
-        const tp = wp(tractAnt); h.down.set(bottom, tp, 0.9, t); h.back.set(bottom, gwP, 0.03, t);
+        const tp = wp(tractAnt); h.down.set(bottom, tp, 0.9, t, std); h.back.set(bottom, gwP, 0.03, t, std);
         hapsS.d = bottom.distanceTo(tp) * K_HAPS;
       } else {
-        h.down.set(bottom, wp(hike, 0, 1, 0), 0.9, t); h.back.set(bottom, bottom, 0.01, t, false);
-        const sr = nearestVis(p, 0.1); relay.set(p, sr ? sr.p : p, !!sr);
+        h.down.set(bottom, wp(hike, 0, 1, 0), 0.9, t, std); h.back.set(bottom, bottom, 0.01, t, false);
+        const sr = nearestVis(p, 0.1); relay.set(p, sr ? sr.p : p, !!sr && std);
       }
     });
     const s0 = sats[0], rel = s0.p.clone().sub(gwP);
@@ -624,12 +676,12 @@ const buildSixG = scene => {
 
   // ---------- update ----------
   let acc = 0;
-  const update = (t, dt) => {
-    ups.forEach(f => f(t, dt));
+  const update = (t, dt, o) => {
+    ups.forEach(f => f(t, dt, o));
     acc += dt;
     if (acc > 0.25) { acc = 0; lives.forEach(([b, fn]) => b.mesh.visible && b.draw(fn())); }
   };
   // prime live boards once
   update(0, 0); lives.forEach(([b, fn]) => b.draw(fn()));
-  return { update, sats, haps };
+  return { update, sats, haps, towerTop, home, cpe, edge, farm, hike, gwP, gw, nearestVis, panelFor, cars, P };
 };
