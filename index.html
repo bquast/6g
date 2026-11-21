@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>sixg — walk through 6G</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
+  #info { position: fixed; left: 16px; top: 16px; max-width: 360px; padding: 14px 16px; border-radius: 14px;
+          background: rgba(6,14,28,.82); color: #e8f3ff; font-size: 14px; line-height: 1.45; }
+  #info h1 { margin: 0 0 6px; font-size: 20px; color: #ffd23f; }
+  #info code { color: #4fe3ff; }
+  #vr { margin-top: 10px; padding: 10px 18px; border: 0; border-radius: 10px; background: #4fe3ff; color: #06121f; font-weight: 700; font-size: 16px; }
+  #vr:disabled { background: #556; color: #aab; }
+</style>
+</head>
+<body>
+<div id="info">
+  <h1>sixg: walk through 6G</h1>
+  A mini planet that shows how IMT-2030 (6G) works: radio on the ground, HAPS in the sky, LEO in space.<br>
+  Desktop: click to look, <code>WASD</code> walk, <code>Shift</code> run, <code>E</code> board/exit craft.
+  In the craft: <code>W/S</code> throttle, arrows pitch/roll, <code>A/D</code> yaw, <code>Q</code> assist, <code>L</code> labels.<br>
+  <button id="vr" disabled>Enter VR</button>
+</div>
+<script src="three.min.js"></script>
+<script src="planet.js"></script>
+<script src="sixg.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
